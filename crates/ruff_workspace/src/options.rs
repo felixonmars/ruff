@@ -2795,6 +2795,18 @@ pub struct FormatOptions {
         "#
     )]
     pub line_ending: Option<LineEnding>,
+
+    /// Whether to format code snippets in docstrings.
+    ///
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            # Enable reformatting of code snippets in docstrings.
+            docstring-code = true
+        "#
+    )]
+    pub docstring_code: Option<bool>,
 }
 
 #[cfg(test)]

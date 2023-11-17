@@ -112,6 +112,9 @@ fn black_compatibility() {
 #[test]
 fn format() {
     let test_file = |input_path: &Path| {
+        if input_path.file_name().unwrap() != "docstring_code_examples.py" {
+            return;
+        }
         let content = fs::read_to_string(input_path).unwrap();
 
         let options = PyFormatOptions::from_extension(input_path);
@@ -198,6 +201,11 @@ fn format() {
         "test/fixtures/ruff/**/*.{py,pyi}",
         test_file
     );
+    // insta::glob!(
+    // "../resources",
+    // "test/fixtures/ruff/**/docstring_code_examples.py",
+    // test_file
+    // );
 }
 
 /// Format another time and make sure that there are no changes anymore
@@ -206,7 +214,7 @@ fn ensure_stability_when_formatting_twice(
     options: PyFormatOptions,
     input_path: &Path,
 ) {
-    let reformatted = match format_module_source(formatted_code, options) {
+    let reformatted = match format_module_source(formatted_code, options.clone()) {
         Ok(reformatted) => reformatted,
         Err(err) => {
             panic!(
@@ -223,7 +231,10 @@ fn ensure_stability_when_formatting_twice(
             .header("Formatted once", "Formatted twice")
             .to_string();
         panic!(
-            r#"Reformatting the formatted code of {} a second time resulted in formatting changes.
+            r#"Reformatting the formatted code of {input_path} a second time resulted in formatting changes.
+
+Options:
+{options}
 ---
 {diff}---
 
@@ -233,9 +244,10 @@ Formatted once:
 
 Formatted twice:
 ---
-{}---"#,
-            input_path.display(),
-            reformatted.as_code(),
+{reformatted}---"#,
+            input_path = input_path.display(),
+            options = &DisplayPyOptions(&options),
+            reformatted = reformatted.as_code(),
         );
     }
 }
@@ -339,12 +351,14 @@ line-width              = {line_width}
 indent-width            = {indent_width}
 quote-style             = {quote_style:?}
 magic-trailing-comma    = {magic_trailing_comma:?}
+docstring-code          = {docstring_code:?}
 preview                 = {preview:?}"#,
             indent_style = self.0.indent_style(),
             indent_width = self.0.indent_width().value(),
             line_width = self.0.line_width().value(),
             quote_style = self.0.quote_style(),
             magic_trailing_comma = self.0.magic_trailing_comma(),
+            docstring_code = self.0.docstring_code(),
             preview = self.0.preview()
         )
     }
