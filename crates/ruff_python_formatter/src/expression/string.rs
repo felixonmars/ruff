@@ -130,7 +130,7 @@ impl<'a> From<&AnyString<'a>> for ExpressionRef<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub(super) enum AnyStringPart<'a> {
+enum AnyStringPart<'a> {
     String(&'a ast::StringLiteral),
     Bytes(&'a ast::BytesLiteral),
     FString(&'a ast::FString),
@@ -139,9 +139,9 @@ pub(super) enum AnyStringPart<'a> {
 impl<'a> From<&AnyStringPart<'a>> for AnyNodeRef<'a> {
     fn from(value: &AnyStringPart<'a>) -> Self {
         match value {
-            AnyStringPart::String(expr) => AnyNodeRef::StringLiteral(expr),
-            AnyStringPart::Bytes(expr) => AnyNodeRef::BytesLiteral(expr),
-            AnyStringPart::FString(expr) => AnyNodeRef::FString(expr),
+            AnyStringPart::String(part) => AnyNodeRef::StringLiteral(part),
+            AnyStringPart::Bytes(part) => AnyNodeRef::BytesLiteral(part),
+            AnyStringPart::FString(part) => AnyNodeRef::FString(part),
         }
     }
 }
