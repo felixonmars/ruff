@@ -1306,7 +1306,7 @@ impl From<StringLiteral> for Expr {
 
 /// An internal representation of [`StringLiteral`] that represents an
 /// implicitly concatenated string.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct ConcatenatedStringLiteral {
     /// Each string literal that makes up the concatenated string.
     strings: Vec<StringLiteral>,
@@ -1319,6 +1319,15 @@ impl ConcatenatedStringLiteral {
     fn as_str(&self) -> &str {
         self.value
             .get_or_init(|| self.strings.iter().map(StringLiteral::as_str).collect())
+    }
+}
+
+impl Debug for ConcatenatedStringLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConcatenatedStringLiteral")
+            .field("strings", &self.strings)
+            .field("value", &self.as_str())
+            .finish()
     }
 }
 
