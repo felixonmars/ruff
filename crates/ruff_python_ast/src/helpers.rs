@@ -1142,7 +1142,10 @@ impl Truthiness {
             Expr::NoneLiteral(_) => Self::Falsey,
             Expr::EllipsisLiteral(_) => Self::Truthy,
             Expr::FString(ast::ExprFString { value, .. }) => {
-                if value.is_empty() {
+                if value.parts().all(|part| match part {
+                    ast::FStringPart::Literal(string_literal) => string_literal.is_empty(),
+                    ast::FStringPart::FString(f_string) => f_string.values.is_empty(),
+                }) {
                     Self::Falsey
                 } else if value.elements().any(|expr| {
                     if let Expr::StringLiteral(ast::ExprStringLiteral { value, .. }) = &expr {

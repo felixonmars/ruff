@@ -642,6 +642,7 @@ impl Expr {
         )
     }
 
+    /// Returns [`LiteralExpressionRef`] if the expression is a literal expression.
     pub fn as_literal_expr(&self) -> Option<LiteralExpressionRef<'_>> {
         match self {
             Expr::StringLiteral(expr) => Some(LiteralExpressionRef::StringLiteral(expr)),
@@ -1036,12 +1037,28 @@ impl FStringValue {
         }
     }
 
-    /// Returns an iterator over the [`StringLiteral`]s contained in this value.
+    /// Returns an iterator over the [`StringLiteral`] parts contained in this value.
+    ///
+    /// Note that this doesn't nest into the f-string parts. For example,
+    ///
+    /// ```python
+    /// "foo" f"bar {x}" "baz" f"qux"
+    /// ```
+    ///
+    /// Here, the string literal parts returned would be `"foo"` and `"baz"`.
     pub fn literals(&self) -> impl Iterator<Item = &StringLiteral> {
         self.parts().filter_map(|part| part.as_literal())
     }
 
-    /// Returns an iterator over the [`FString`]s contained in this value.
+    /// Returns an iterator over the [`FString`] parts contained in this value.
+    ///
+    /// Note that this doesn't nest into the f-string parts. For example,
+    ///
+    /// ```python
+    /// "foo" f"bar {x}" "baz" f"qux"
+    /// ```
+    ///
+    /// Here, the f-string parts returned would be `f"bar {x}"` and `f"qux"`.
     pub fn f_strings(&self) -> impl Iterator<Item = &FString> {
         self.parts().filter_map(|part| part.as_f_string())
     }
@@ -1060,17 +1077,9 @@ impl FStringValue {
     pub fn elements(&self) -> impl Iterator<Item = &Expr> {
         self.f_strings().flat_map(|fstring| fstring.values.iter())
     }
-
-    /// Returns `true` if the f-string value is empty, `false` otherwise.
-    // TODO: This is not correct. It's used only in one place, so better to inline the logic
-    pub fn is_empty(&self) -> bool {
-        self.parts().all(|part| match part {
-            FStringPart::Literal(literal) => literal.is_empty(),
-            FStringPart::FString(fstring) => fstring.values.is_empty(),
-        })
-    }
 }
 
+/// An internal representation of [`FStringValue`].
 #[derive(Clone, Debug, PartialEq)]
 enum FStringValueInner {
     /// A single f-string i.e., `f"foo"`.
@@ -1149,12 +1158,20 @@ pub struct StringLiteralValue {
 }
 
 impl StringLiteralValue {
+    /// Creates a new single string literal with the given value.
     pub fn single(string: StringLiteral) -> Self {
         Self {
             inner: StringLiteralValueInner::Single(string),
         }
     }
 
+    /// Creates a new string literal with the given values that represents an
+    /// implicitly concatenated strings.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `strings` is less than 2. Use [`StringLiteralValue::single`]
+    /// instead.
     pub fn concatenated(strings: Vec<StringLiteral>) -> Self {
         assert!(strings.len() > 1);
         let value = strings.iter().map(StringLiteral::as_str).collect();
@@ -1179,7 +1196,7 @@ impl StringLiteralValue {
         self.parts().next().map_or(false, |part| part.unicode)
     }
 
-    /// Returns an iterator over all the [`StringLiteral`]s contained in this value.
+    /// Returns an iterator over all the [`StringLiteral`] parts contained in this value.
     pub fn parts(&self) -> impl Iterator<Item = &StringLiteral> {
         match &self.inner {
             StringLiteralValueInner::Single(value) => Left(std::iter::once(value)),
@@ -1187,7 +1204,7 @@ impl StringLiteralValue {
         }
     }
 
-    /// Returns an iterator over all the [`StringLiteral`]s contained in this value
+    /// Returns an iterator over all the [`StringLiteral`] parts contained in this value
     /// that allows modification.
     pub(crate) fn parts_mut(&mut self) -> impl Iterator<Item = &mut StringLiteral> {
         match &mut self.inner {
@@ -1196,7 +1213,7 @@ impl StringLiteralValue {
         }
     }
 
-    /// Returns the concatenated string value.
+    /// Returns the concatenated string value as a [`str`].
     pub fn as_str(&self) -> &str {
         match &self.inner {
             StringLiteralValueInner::Single(value) => value.as_str(),
@@ -1231,9 +1248,13 @@ impl fmt::Display for StringLiteralValue {
     }
 }
 
+/// An internal representation of [`StringLiteralValue`].
 #[derive(Clone, Debug, PartialEq)]
 enum StringLiteralValueInner {
+    /// A single string literal i.e., `"foo"`.
     Single(StringLiteral),
+
+    /// An implicitly concatenated string literals i.e., `"foo" "bar"`.
     Concatenated(ConcatenatedStringLiteral),
 }
 
@@ -1243,6 +1264,8 @@ impl Default for StringLiteralValueInner {
     }
 }
 
+/// An AST node that represents a single string literal which is part of an
+/// [`ExprStringLiteral`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StringLiteral {
     pub range: TextRange,
@@ -1271,16 +1294,6 @@ impl StringLiteral {
     }
 }
 
-impl From<String> for StringLiteral {
-    fn from(value: String) -> Self {
-        Self {
-            value,
-            unicode: false,
-            range: TextRange::default(),
-        }
-    }
-}
-
 impl From<StringLiteral> for Expr {
     fn from(payload: StringLiteral) -> Self {
         ExprStringLiteral {
@@ -1291,9 +1304,13 @@ impl From<StringLiteral> for Expr {
     }
 }
 
+/// An internal representation of [`StringLiteral`] that represents an
+/// implicitly concatenated string.
 #[derive(Clone, Debug, PartialEq)]
 struct ConcatenatedStringLiteral {
+    /// Each string literal that makes up the concatenated string.
     strings: Vec<StringLiteral>,
+    /// The concatenated string value.
     value: String,
 }
 
@@ -1324,12 +1341,20 @@ pub struct BytesLiteralValue {
 }
 
 impl BytesLiteralValue {
+    /// Creates a new single bytes literal with the given value.
     pub fn single(value: BytesLiteral) -> Self {
         Self {
             inner: BytesLiteralValueInner::Single(value),
         }
     }
 
+    /// Creates a new bytes literal with the given values that represents an
+    /// implicitly concatenated bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `values` is less than 2. Use [`BytesLiteralValue::single`]
+    /// instead.
     pub fn concatenated(values: Vec<BytesLiteral>) -> Self {
         assert!(values.len() > 1);
         Self {
@@ -1342,7 +1367,7 @@ impl BytesLiteralValue {
         matches!(self.inner, BytesLiteralValueInner::Concatenated(_))
     }
 
-    /// Returns an iterator over all the [`BytesLiteral`]s contained in this value.
+    /// Returns an iterator over all the [`BytesLiteral`] parts contained in this value.
     pub fn parts(&self) -> impl Iterator<Item = &BytesLiteral> {
         match &self.inner {
             BytesLiteralValueInner::Single(value) => Left(std::iter::once(value)),
@@ -1350,7 +1375,7 @@ impl BytesLiteralValue {
         }
     }
 
-    /// Returns an iterator over all the [`BytesLiteral`]s contained in this value
+    /// Returns an iterator over all the [`BytesLiteral`] parts contained in this value
     /// that allows modification.
     pub(crate) fn parts_mut(&mut self) -> impl Iterator<Item = &mut BytesLiteral> {
         match &mut self.inner {
@@ -1370,7 +1395,7 @@ impl BytesLiteralValue {
     }
 
     /// Returns an iterator over the bytes of the concatenated bytes.
-    pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
+    fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.parts()
             .flat_map(|part| part.as_slice().iter().copied())
     }
@@ -1388,9 +1413,13 @@ impl PartialEq<[u8]> for BytesLiteralValue {
     }
 }
 
+/// An internal representation of [`BytesLiteralValue`].
 #[derive(Clone, Debug, PartialEq)]
 enum BytesLiteralValueInner {
+    /// A single bytes literal i.e., `b"foo"`.
     Single(BytesLiteral),
+
+    /// An implicitly concatenated bytes literals i.e., `b"foo" b"bar"`.
     Concatenated(Vec<BytesLiteral>),
 }
 
@@ -1400,6 +1429,8 @@ impl Default for BytesLiteralValueInner {
     }
 }
 
+/// An AST node that represents a single bytes literal which is part of an
+/// [`ExprBytesLiteral`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BytesLiteral {
     pub range: TextRange,
@@ -1421,6 +1452,7 @@ impl Deref for BytesLiteral {
 }
 
 impl BytesLiteral {
+    /// Extracts a byte slice containing the entire [`BytesLiteral`].
     pub fn as_slice(&self) -> &[u8] {
         self
     }
