@@ -1,5 +1,6 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
 
+use std::cell::OnceCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -1174,11 +1175,10 @@ impl StringLiteralValue {
     /// instead.
     pub fn concatenated(strings: Vec<StringLiteral>) -> Self {
         assert!(strings.len() > 1);
-        let value = strings.iter().map(StringLiteral::as_str).collect();
         Self {
             inner: StringLiteralValueInner::Concatenated(ConcatenatedStringLiteral {
                 strings,
-                value,
+                value: OnceCell::new(),
             }),
         }
     }
@@ -1217,7 +1217,7 @@ impl StringLiteralValue {
     pub fn as_str(&self) -> &str {
         match &self.inner {
             StringLiteralValueInner::Single(value) => value.as_str(),
-            StringLiteralValueInner::Concatenated(value) => value.value.as_str(),
+            StringLiteralValueInner::Concatenated(value) => value.as_str(),
         }
     }
 }
@@ -1311,7 +1311,15 @@ struct ConcatenatedStringLiteral {
     /// Each string literal that makes up the concatenated string.
     strings: Vec<StringLiteral>,
     /// The concatenated string value.
-    value: String,
+    value: OnceCell<String>,
+}
+
+impl ConcatenatedStringLiteral {
+    /// Extracts a string slice containing the entire concatenated string.
+    fn as_str(&self) -> &str {
+        self.value
+            .get_or_init(|| self.strings.iter().map(StringLiteral::as_str).collect())
+    }
 }
 
 /// An AST node that represents either a single bytes literal or an implicitly
